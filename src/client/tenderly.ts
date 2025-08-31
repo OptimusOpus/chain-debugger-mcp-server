@@ -9,7 +9,7 @@ export class TenderlyClient {
     this.headers = {
       "X-Access-Key": `${config.accessToken}`,
       "Content-Type": "application/json",
-      "User-Agent": "tenderly-mcp-server/0.0.1",
+      "User-Agent": "chain-debugger-mcp-server/0.0.1",
     };
   }
 

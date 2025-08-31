@@ -219,7 +219,7 @@ if (memoryService) {
 
 // Create server instance with all capabilities
 let server = new McpServer({
-  name: "tenderly-mcp-server",
+  name: "chain-debugger-mcp-server",
   version: "0.0.1",
   capabilities,
 });
@@ -773,7 +773,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   
-  let serverName = "Tenderly MCP Server";
+  let serverName = "Chain Debugger MCP Server";
   const components = ["Tenderly"];
   
   if (evmRpcClient) components.push("EVM RPC");
