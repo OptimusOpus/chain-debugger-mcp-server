@@ -1,3 +1,5 @@
+<img width="1024" height="1536" alt="image" src="https://github.com/user-attachments/assets/a91ae637-38a3-47a8-8ceb-3e18144479d0" />
+
 # Chain Debugger MCP Server
 
 An integrated MCP (Model Context Protocol) server providing dual blockchain connectivity:
