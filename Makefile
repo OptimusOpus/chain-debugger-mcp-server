@@ -6,7 +6,7 @@ export
 
 # Build the TypeScript project
 build:
-	npm run build
+	pnpm run build
 
 # Run the MCP inspector with environment variables
 inspect: build

@@ -42,7 +42,7 @@ This MCP server establishes a robust connection between AI systems and blockchai
 1. Clone the repository to your local environment
 2. Install all required dependencies:
    ```bash
-   npm install
+   pnpm install
    ```
 3. Initialize your environment configuration:
    ```bash
@@ -63,7 +63,7 @@ This MCP server establishes a robust connection between AI systems and blockchai
    ```
 5. Compile the TypeScript project:
    ```bash
-   npm run build
+   pnpm run build
    ```
 
 ## Usage
@@ -72,14 +72,14 @@ This MCP server establishes a robust connection between AI systems and blockchai
 
 Launch the MCP server:
 ```bash
-npm start
+pnpm start
 ```
 
 The server operates through stdio (standard input/output) communication following MCP specification standards. Initialization logs output to stderr while the server awaits MCP protocol messages via stdin.
 
 For dynamic EVM RPC configuration, command-line arguments are supported:
 ```bash
-npm start -- --rpc-url https://mainnet.zircuit.com --chain-name Zircuit --analytics
+pnpm start -- --rpc-url https://mainnet.zircuit.com --chain-name Zircuit --analytics
 ```
 
 ### AI Assistant Integration
