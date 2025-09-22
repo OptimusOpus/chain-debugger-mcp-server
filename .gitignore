@@ -4,3 +4,6 @@ build/
 pnpm-lock.yaml
 
 .cursor/
+
+# SSL certificates
+certs/

@@ -68,9 +68,30 @@ This MCP server establishes a robust connection between AI systems and blockchai
    pnpm run build
    ```
 
+## Transport Modes
+
+This server can run in three modes:
+
+- **Stdio (default)**: best for local dev and SSH/containers
+- **HTTP**: stateless Streamable HTTP endpoint at `/mcp`
+- **HTTPS**: secure HTTP with SSL/TLS certificates
+
+Configure via environment variables (see `.env.example`):
+
+```
+MCP_TRANSPORT=stdio   # or "http"
+PORT=3000             # only used when MCP_TRANSPORT=http
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173  # optional, HTTP only
+
+# HTTPS Configuration (Optional)
+HTTPS_ENABLED=false   # set to true to enable HTTPS
+CERT_PATH=./certs/server.crt
+KEY_PATH=./certs/server.key
+```
+
 ## Usage
 
-### Server Execution
+### Server Execution (stdio)
 
 Launch the MCP server:
 ```bash
@@ -83,6 +104,50 @@ For dynamic EVM RPC configuration, command-line arguments are supported:
 ```bash
 pnpm start -- --rpc-url https://mainnet.zircuit.com --chain-name Zircuit --analytics
 ```
+
+### Server Execution (HTTP)
+
+Run with HTTP transport:
+
+```bash
+MCP_TRANSPORT=http PORT=3000 pnpm start
+```
+
+The server will listen on `http://0.0.0.0:3000/mcp` and accept MCP JSON-RPC requests via POST.
+
+Simple health/method check:
+
+```bash
+curl -i http://localhost:3000/mcp   # returns 405 for GET (POST is required)
+```
+
+To call from a browser context, set `CORS_ORIGINS` to your client origin(s).
+
+### Server Execution (HTTPS)
+
+For HTTPS support, first generate self-signed certificates:
+
+```bash
+./generate-certs.sh
+```
+
+Then run with HTTPS enabled:
+
+```bash
+# Option 1: Quick start script
+./start-https.sh
+
+# Option 2: Manual start
+MCP_TRANSPORT=http HTTPS_ENABLED=true pnpm start
+
+# Option 3: Using environment variables (in .env)
+MCP_TRANSPORT=http
+HTTPS_ENABLED=true
+```
+
+The server will listen on `https://0.0.0.0:3000/mcp` with SSL/TLS encryption.
+
+**Note**: For development with self-signed certificates, you'll need to accept the certificate warning in your browser or configure your MCP client to ignore SSL verification.
 
 ### AI Assistant Integration
 
@@ -131,6 +196,76 @@ make inspect
 ```
 
 This launches a web-based interface enabling direct testing of all MCP resources and tools.
+
+## Docker
+
+### Build
+
+```bash
+docker build -t chain-debugger-mcp:local .
+```
+
+### Run (stdio)
+
+```bash
+docker run --rm -i \
+  --env-file .env \
+  -e MCP_TRANSPORT=stdio \
+  -v "$PWD/data:/data" -v "$PWD/cache:/cache" \
+  chain-debugger-mcp:local
+```
+
+### Run (HTTP)
+
+```bash
+docker run -d --name chain-debugger-http \
+  --env-file .env \
+  -e MCP_TRANSPORT=http -e PORT=3000 \
+  -e CORS_ORIGINS=http://localhost:5173 \
+  -p 3000:3000 \
+  -v "$PWD/data:/data" -v "$PWD/cache:/cache" \
+  chain-debugger-mcp:local
+```
+
+### Run (HTTPS)
+
+First generate certificates, then run with HTTPS:
+
+```bash
+# Generate certificates
+./generate-certs.sh
+
+# Run with HTTPS
+docker run -d --name chain-debugger-https \
+  --env-file .env \
+  -e MCP_TRANSPORT=http -e PORT=3000 \
+  -e HTTPS_ENABLED=true \
+  -e CORS_ORIGINS=https://localhost:5173 \
+  -p 3000:3000 \
+  -v "$PWD/data:/data" -v "$PWD/cache:/cache" \
+  -v "$PWD/certs:/app/certs" \
+  chain-debugger-mcp:local
+```
+
+### Docker Compose
+
+See `docker-compose.yml` for a minimal service configured for stdio transport with mounted volumes and `.env`.
+
+## SSH Wrapper (remote stdio)
+
+Use `scripts/ssh-stdio-wrapper.sh` to run the container on a remote host and proxy stdio over SSH.
+
+Required environment variables:
+
+```
+REMOTE_HOST=user@your.server
+REMOTE_DOCKER_IMAGE=ghcr.io/your/repo:tag  # or built local image name
+REMOTE_ENV_FILE=/path/on/remote/.env
+REMOTE_DATA_DIR=/path/on/remote/data
+REMOTE_CACHE_DIR=/path/on/remote/cache
+```
+
+Then point your MCP client to execute the script as the server command. The script runs Docker with `-i` preserving stdio and passes your env/volumes.
 
 ## Technical Architecture
 

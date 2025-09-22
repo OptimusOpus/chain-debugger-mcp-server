@@ -2,6 +2,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { McpAnalytics } from "mcp-analytics-middleware";
+import express, { Request, Response } from "express";
+import cors from "cors";
+import https from "https";
+import fs from "fs";
+import path from "path";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { loadConfig } from "./config.js";
 import { TenderlyClient } from "./client/tenderly.js";
@@ -114,7 +120,8 @@ const GetAlertByIdSchema = z.object({
   id: z.string().describe("The ID of the alert to retrieve"),
 });
 
-// Build capabilities based on configuration
+// Base capabilities advertised by the server; additional capabilities are
+// conditionally added below based on configured clients/services
 const capabilities: any = {
   resources: {
     "tenderly://alerts": {
@@ -133,6 +140,11 @@ const capabilities: any = {
     },
   },
 };
+
+// Return the globally configured server instance (used by both stdio and HTTP modes)
+function createServer() {
+  return server;
+}
 
 // Add EVM capabilities if configured
 if (config.evmRpcUrl) {
@@ -770,21 +782,111 @@ if (memoryService) {
 }
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  
+  const transportMode = process.env.MCP_TRANSPORT || "stdio";
+
   let serverName = "Chain Debugger MCP Server";
   const components = ["Tenderly"];
-  
   if (evmRpcClient) components.push("EVM RPC");
   if (megaethClient) components.push("MegaETH");
   if (memoryService) components.push("Memory");
-  
   if (components.length > 1) {
     serverName = `${components.join(" + ")} MCP Server`;
   }
-  
-  console.error(`${serverName} running on stdio`);
+
+  if (transportMode === "http") {
+    const app = express();
+    app.use(express.json());
+
+    // Optional CORS configuration via CORS_ORIGINS (comma-separated)
+    const corsOrigins = process.env.CORS_ORIGINS?.split(",").map(s => s.trim()).filter(Boolean);
+    if (corsOrigins && corsOrigins.length > 0) {
+      app.use(cors({
+        origin: corsOrigins,
+        exposedHeaders: ["Mcp-Session-Id"],
+        allowedHeaders: ["Content-Type", "mcp-session-id", "authorization"],
+      }));
+    }
+
+    // Stateless handler: new server+transport per request
+    app.post("/mcp", async (req: Request, res: Response) => {
+      try {
+        const srv = createServer();
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+
+        res.on("close", () => {
+          transport.close();
+        });
+
+        await srv.connect(transport);
+        await transport.handleRequest(req as any, res as any, req.body);
+      } catch (error) {
+        console.error("Error handling MCP request:", error);
+        if (!res.headersSent) {
+          res.status(500).json({
+            jsonrpc: "2.0",
+            error: { code: -32603, message: "Internal server error" },
+            id: null,
+          });
+        }
+      }
+    });
+
+    app.get("/mcp", async (_req: Request, res: Response) => {
+      res
+        .status(405)
+        .end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }));
+    });
+
+    app.delete("/mcp", async (_req: Request, res: Response) => {
+      res
+        .status(405)
+        .end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null }));
+    });
+
+    const port = parseInt(process.env.PORT || "3000", 10);
+    const httpsEnabled = process.env.HTTPS_ENABLED === 'true';
+
+    let server;
+
+    if (httpsEnabled) {
+      // Try to load SSL certificates
+      try {
+        const certPath = process.env.CERT_PATH || './certs/server.crt';
+        const keyPath = process.env.KEY_PATH || './certs/server.key';
+
+        const httpsOptions = {
+          cert: fs.readFileSync(path.resolve(certPath)),
+          key: fs.readFileSync(path.resolve(keyPath))
+        };
+
+        server = https.createServer(httpsOptions, app);
+        server.listen(port, () => {
+          console.error(`${serverName} listening on https://0.0.0.0:${port} (/mcp)`);
+        });
+      } catch (error) {
+        console.error("Failed to load SSL certificates, falling back to HTTP:", error);
+        console.error("Run './generate-certs.sh' to create certificates or set HTTPS_ENABLED=false");
+        server = app.listen(port, () => {
+          console.error(`${serverName} listening on http://0.0.0.0:${port} (/mcp)`);
+        });
+      }
+    } else {
+      server = app.listen(port, () => {
+        console.error(`${serverName} listening on http://0.0.0.0:${port} (/mcp)`);
+      });
+    }
+
+    server.on("error", (err: unknown) => {
+      console.error("Failed to start server:", err);
+      process.exit(1);
+    });
+  } else {
+    // Default: stdio transport
+    const srv = createServer();
+    const transport = new StdioServerTransport();
+    await srv.connect(transport);
+    console.error(`${serverName} running on stdio`);
+  }
 }
 
 main().catch((error) => {
